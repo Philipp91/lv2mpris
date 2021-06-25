@@ -1,0 +1,4 @@
+/target
+Cargo.lock
+/lv2mpris.lv2/liblv2mpris.so
+lv2mpris.zip
