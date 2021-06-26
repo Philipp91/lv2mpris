@@ -172,7 +172,7 @@ impl LV2MPRIS {
     fn pitch_to_seek_offset(pitch: f64) -> i64 {
         const MIDDLE_PITCH: f64 = U14_MIDDLE as f64;
         let fraction = (pitch - MIDDLE_PITCH) / MIDDLE_PITCH;
-        return (SEEK_PITCH_DURATION.as_micros() as f64 * fraction * fraction.abs()) as i64;
+        return (SEEK_PITCH_DURATION.as_micros() as f64 * fraction * fraction * fraction) as i64;
     }
 
     fn on_pitch_change(&mut self, old_pitch: u16, new_pitch: u16) {
@@ -194,21 +194,13 @@ lv2_descriptors!(LV2MPRIS);
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Index;
-    use std::time::Duration;
-
-    use mpris::{PlaybackStatus, Player, PlayerFinder};
-    use mpris::PlaybackStatus::Playing;
-
-    use crate::{find_player, get_player_score, PREFERRED_PLAYERS};
+    use crate::*;
 
     #[test]
     fn test_test() {
         if let Some(player) = find_player() {
             println!("Player: {}", player.identity());
-            println!("Canseek: {}", player.can_seek().unwrap());
-            player.seek(Duration::from_secs(5).as_micros() as i64 * -1);
-            println!("Position is {} of {}", player.get_position().unwrap().as_secs(), player.get_metadata().unwrap().length().expect("sdf").as_secs());
+            println!("Shuffle: {}", player.checked_set_shuffle(false).unwrap());
         }
         println!("DONE");
     }

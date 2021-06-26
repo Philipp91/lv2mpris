@@ -31,6 +31,11 @@
     <Index>0</Index>
     <Name>Play</Name>
     <Symbol>control_play</Symbol>
+    <MidiChannel>5</MidiChannel>
+    <MappedControlIndex>4</MappedControlIndex>
+    <MappedMinimum>0</MappedMinimum>
+    <MappedMaximum>1</MappedMaximum>
+    <MidiCC>4</MidiCC>
     <Value>0</Value>
    </Parameter>
 
@@ -45,6 +50,11 @@
     <Index>2</Index>
     <Name>Play/Pause</Name>
     <Symbol>control_play_pause</Symbol>
+    <MidiChannel>5</MidiChannel>
+    <MappedControlIndex>5</MappedControlIndex>
+    <MappedMinimum>0</MappedMinimum>
+    <MappedMaximum>1</MappedMaximum>
+    <MidiCC>5</MidiCC>
     <Value>0</Value>
    </Parameter>
 
@@ -59,6 +69,11 @@
     <Index>4</Index>
     <Name>Previous track</Name>
     <Symbol>control_prev</Symbol>
+    <MidiChannel>5</MidiChannel>
+    <MappedControlIndex>1</MappedControlIndex>
+    <MappedMinimum>0</MappedMinimum>
+    <MappedMaximum>1</MappedMaximum>
+    <MidiCC>1</MidiCC>
     <Value>0</Value>
    </Parameter>
 
@@ -66,6 +81,11 @@
     <Index>5</Index>
     <Name>Next track</Name>
     <Symbol>control_next</Symbol>
+    <MidiChannel>5</MidiChannel>
+    <MappedControlIndex>2</MappedControlIndex>
+    <MappedMinimum>0</MappedMinimum>
+    <MappedMaximum>1</MappedMaximum>
+    <MidiCC>2</MidiCC>
     <Value>0</Value>
    </Parameter>
 
@@ -122,11 +142,6 @@
     <Index>13</Index>
     <Name>Volume</Name>
     <Symbol>volume</Symbol>
-    <MidiChannel>6</MidiChannel>
-    <MappedControlIndex>1</MappedControlIndex>
-    <MappedMinimum>0</MappedMinimum>
-    <MappedMaximum>1</MappedMaximum>
-    <MidiCC>1</MidiCC>
     <Value>0.519685029983521</Value>
    </Parameter>
 
