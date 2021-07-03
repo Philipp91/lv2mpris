@@ -1,4 +1,7 @@
-use std::time::{Duration};
+use std::sync::mpsc;
+use std::sync::mpsc::SyncSender;
+use std::thread;
+use std::time::Duration;
 
 use lv2::prelude::*;
 use mpris::{DBusError, Player, PlayerFinder};
@@ -41,14 +44,30 @@ struct Ports {
     enable_pitch_to_seek: InputPort<Control>,
 }
 
+type SimpleAction = fn(&Player) -> Result<(), DBusError>;
+
+enum Action {
+    Simple(SimpleAction),
+    Seek(i64), // offset_in_microseconds
+}
+
+impl Action {
+    fn run(&self, player: &Player) -> Option<()> {
+        match self {
+            Action::Simple(action) => (action)(player).ok(),
+            Action::Seek(offset_in_microseconds) => player.seek(*offset_in_microseconds).ok(),
+        }
+    }
+}
+
 struct KeyMapping {
     input_port: fn(&Ports) -> &InputPort<Control>,
     last_state: bool,
-    action: fn(&Player) -> Result<(), DBusError>,
+    action: SimpleAction,
 }
 
 fn make_key_mapping(input_port: fn(&Ports) -> &InputPort<Control>,
-                    action: fn(&Player) -> Result<(), DBusError>) -> KeyMapping {
+                    action: SimpleAction) -> KeyMapping {
     KeyMapping { input_port, last_state: false, action }
 }
 
@@ -98,6 +117,7 @@ struct LV2MPRIS {
     last_volume: f32,
     key_mappings: Vec<KeyMapping>,
     pitch_value: u16,
+    work_transmitter: SyncSender<Action>,
 }
 
 impl Plugin for LV2MPRIS {
@@ -106,11 +126,20 @@ impl Plugin for LV2MPRIS {
     type AudioFeatures = ();
 
     fn new(_plugin_info: &PluginInfo, features: &mut Features<'static>) -> Option<Self> {
+        let (transmitter, receiver) = mpsc::sync_channel::<Action>(10);
+        thread::spawn(move || {
+            for action in receiver { // This loop ends when the last transmitter is deleted.
+                if let Some(player) = find_player() {
+                    action.run(&player);
+                }
+            }
+        });
         Some(Self {
             urids: features.map.populate_collection()?,
             last_volume: f32::MIN,
             key_mappings: default_key_mappings(),
             pitch_value: U14_MIDDLE,
+            work_transmitter: transmitter,
         })
     }
 
@@ -144,9 +173,7 @@ impl LV2MPRIS {
             if **((key_mapping.input_port)(ports)) > 0.5 {
                 if !key_mapping.last_state {
                     key_mapping.last_state = true;
-                    if let Some(player) = find_player() {
-                        (key_mapping.action)(&player).ok();
-                    }
+                    self.work_transmitter.send(Action::Simple(key_mapping.action)).ok();
                 }
             } else {
                 if key_mapping.last_state {
@@ -180,12 +207,10 @@ impl LV2MPRIS {
         // when the wheel is being released.
         if (new_pitch > U14_MIDDLE && new_pitch > old_pitch) ||
             (new_pitch < U14_MIDDLE && new_pitch < old_pitch) {
-            if let Some(player) = find_player() {
-                let old_offset = LV2MPRIS::pitch_to_seek_offset(old_pitch as f64);
-                let new_offset = LV2MPRIS::pitch_to_seek_offset(new_pitch as f64);
-                let corrected_old_offset = if old_offset.signum() == new_offset.signum() { old_offset } else { 0 };
-                player.seek(new_offset - corrected_old_offset).ok();
-            }
+            let old_offset = LV2MPRIS::pitch_to_seek_offset(old_pitch as f64);
+            let new_offset = LV2MPRIS::pitch_to_seek_offset(new_pitch as f64);
+            let corrected_old_offset = if old_offset.signum() == new_offset.signum() { old_offset } else { 0 };
+            self.work_transmitter.send(Action::Seek(new_offset - corrected_old_offset)).ok();
         }
     }
 }
