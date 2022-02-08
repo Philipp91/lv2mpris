@@ -21,6 +21,7 @@ fn find_player<'b>() -> Option<Player<'b>> {
 }
 
 const U14_MIDDLE: u16 = 1 << 13;
+const U14_MAX: u16 = (1 << 14) - 1;
 
 #[derive(PortCollection)]
 struct Ports {
@@ -71,9 +72,11 @@ fn make_key_mapping(input_port: fn(&Ports) -> &InputPort<Control>,
     KeyMapping { input_port, last_state: false, action }
 }
 
-const SEEK_STEP_DURATION: &'static Duration = &Duration::from_secs(5);
-// For a single button click.
-const SEEK_PITCH_DURATION: &'static Duration = &Duration::from_secs(60); // Bending the pitch wheel all the way.
+const MIN_PITCH: u16 = U14_MIDDLE / 4; // We assume that quickly tapping the wheel bends it by at most a quarter.
+const SEEK_STEP_DURATION: &'static Duration = &Duration::from_secs(5); // For a single step with a button.
+const SEEK_PITCH_STEP_DURATION: i64 = Duration::from_secs(2).as_micros() as i64; // For a single tap of the pitch wheel.
+const SEEK_PITCH_DURATION: &'static Duration = &Duration::from_secs(30); // Bending the pitch wheel all the way.
+const SEEK_PITCH_HOLD_DURATION: i64 = Duration::from_secs(1).as_micros() as i64; // When holding the pitch wheel all the way.
 
 fn default_key_mappings() -> Vec<KeyMapping> {
     vec![
@@ -186,12 +189,20 @@ impl LV2MPRIS {
     fn run_pitch_bend_to_seek(&mut self, ports: &Ports) {
         let input_sequence = ports.midi_in.read(self.urids.atom.sequence, self.urids.unit.beat).unwrap();
         for (_, atom) in input_sequence {
-            if let Some(MidiMessage::PitchBendChange(_, pitch_bend)) = atom.read(self.urids.midi.wmidi, ()) {
+            let value = atom.read(self.urids.midi.wmidi, ());
+            if let Some(MidiMessage::PitchBendChange(_, pitch_bend)) = value {
                 let new_pitch = U14::data_to_slice(&[pitch_bend])[0];
                 self.on_pitch_change(self.pitch_value, new_pitch);
                 self.pitch_value = new_pitch;
-                break;
+                return;
             }
+        }
+
+        // Keep seeking at a certain speed if
+        if self.pitch_value == 0 {
+            self.work_transmitter.send(Action::Seek(-SEEK_PITCH_HOLD_DURATION)).ok();
+        } else if self.pitch_value == U14_MAX {
+            self.work_transmitter.send(Action::Seek(SEEK_PITCH_HOLD_DURATION)).ok();
         }
     }
 
@@ -203,8 +214,20 @@ impl LV2MPRIS {
     }
 
     fn on_pitch_change(&mut self, old_pitch: u16, new_pitch: u16) {
-        // Only pass on the pitch if the wheel was moved further than it was before, i.e. do nothing
-        // when the wheel is being released.
+        if new_pitch < U14_MIDDLE && new_pitch > U14_MIDDLE - MIN_PITCH { // Do a single rewind step ...
+            if old_pitch >= U14_MIDDLE { // ... but only if we just freshly entered the MIN_PITCH area.
+                self.work_transmitter.send(Action::Seek(-SEEK_PITCH_STEP_DURATION)).ok();
+            }
+            return;
+        } else if new_pitch > U14_MIDDLE && new_pitch < U14_MIDDLE + MIN_PITCH { // Do a single forward step ...
+            if old_pitch <= U14_MIDDLE { // ... but only if we just freshly entered the MIN_PITCH area.
+                self.work_transmitter.send(Action::Seek(SEEK_PITCH_STEP_DURATION)).ok();
+            }
+            return;
+        }
+
+        // Now we're beyond the MIN_PITCH area. Only seek if the wheel was moved further than it was before, i.e.
+        // do nothing when the wheel is being released.
         if (new_pitch > U14_MIDDLE && new_pitch > old_pitch) ||
             (new_pitch < U14_MIDDLE && new_pitch < old_pitch) {
             let old_offset = LV2MPRIS::pitch_to_seek_offset(old_pitch as f64);
