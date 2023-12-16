@@ -14,7 +14,7 @@ fn get_player_score(player: &Player) -> usize {
     PREFERRED_PLAYERS.iter().position(|p| *p == player.identity()).unwrap_or(usize::MAX)
 }
 
-fn find_player<'b>() -> Option<Player<'b>> {
+fn find_player() -> Option<Player> {
     let finder = PlayerFinder::new().expect("Could not connect to D-Bus");
     let players = finder.find_all().expect("Could not list players");
     players.into_iter().min_by_key(|p| get_player_score(p))
